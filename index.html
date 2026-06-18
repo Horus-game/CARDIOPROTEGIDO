@@ -1,0 +1,1129 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="color-scheme" content="light">
+<title>DEA Río Cuarto · Localizador colaborativo</title>
+
+<!-- PWA -->
+<meta name="theme-color" content="#D7263D">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="DEA Río Cuarto">
+<meta name="application-name" content="DEA Río Cuarto">
+<meta name="description" content="Mapa colaborativo de desfibriladores en Río Cuarto, Córdoba. Encontrá el DEA más cercano en segundos.">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root{
+    --color-bg:#F4F6F7;
+    --color-surface:#FFFFFF;
+    --color-ink:#101826;
+    --color-ink-muted:#5B6B7A;
+    --color-steel:#3E6990;
+    --color-steel-dark:#2C4D68;
+    --color-red:#D7263D;
+    --color-red-dark:#AE1C30;
+    --color-green:#1F9D55;
+    --color-green-soft:#DCF3E5;
+    --color-amber:#F2A93B;
+    --radius-sm:6px;
+    --radius-md:10px;
+    --font-display:'Barlow Condensed',sans-serif;
+    --font-body:'Inter',sans-serif;
+    --font-mono:'IBM Plex Mono',monospace;
+    --shadow-1:0 2px 8px rgba(16,24,38,.08);
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; min-height:100%; background:var(--color-bg); color:var(--color-ink); font-family:var(--font-body); -webkit-font-smoothing:antialiased; }
+  h1,h2,h3{ font-family:var(--font-display); }
+  button{ font-family:var(--font-body); }
+
+  .top-chrome{ position:sticky; top:0; z-index:30; background:var(--color-surface); box-shadow:var(--shadow-1); }
+
+  .app-header{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 16px 6px; }
+  .brand{ display:flex; align-items:center; gap:10px; min-width:0; }
+  .brand-icon svg{ width:32px; height:32px; display:block; flex-shrink:0; }
+  .brand-text{ min-width:0; }
+  .brand-title{ font-weight:800; letter-spacing:.04em; font-size:1.2rem; text-transform:uppercase; margin:0; line-height:1.1; white-space:nowrap; }
+  .brand-sub{ font-size:.68rem; color:var(--color-ink-muted); margin:0; }
+  .sync-status{ display:flex; align-items:center; gap:6px; font-family:var(--font-mono); font-size:.7rem; color:var(--color-ink-muted); white-space:nowrap; flex-shrink:0; }
+  .sync-dot{ width:9px; height:9px; border-radius:50%; background:#9AA7B2; }
+  .sync-dot.status-live{ background:var(--color-green); animation:dotlive 2s infinite; }
+  .sync-dot.status-down{ background:var(--color-amber); }
+  @keyframes dotlive{ 0%{box-shadow:0 0 0 0 rgba(31,157,85,.45);} 70%{box-shadow:0 0 0 6px rgba(31,157,85,0);} 100%{box-shadow:0 0 0 0 rgba(31,157,85,0);} }
+
+  .pulse-strip{ width:100%; height:14px; overflow:hidden; }
+  .pulse-track{ width:200%; height:14px; display:block; animation:ecg-scroll 4s linear infinite; }
+  .pulse-track path{ fill:none; stroke:var(--color-steel); stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; transition:stroke .2s,stroke-width .2s; }
+  @keyframes ecg-scroll{ from{ transform:translateX(0); } to{ transform:translateX(-50%); } }
+  .pulse-strip.spike .pulse-track path{ stroke:var(--color-red); stroke-width:2.4; }
+  .pulse-strip.spike .pulse-track{ animation-duration:1.4s; }
+
+  .config-banner{ background:#FFF4E0; border-top:1px solid var(--color-amber); color:#7A5400; font-size:.8rem; padding:10px 16px; line-height:1.45; }
+  .config-banner code{ background:rgba(0,0,0,.06); padding:1px 5px; border-radius:4px; font-family:var(--font-mono); }
+
+  .notice-banner{ background:#EFF4F7; border-top:1px solid rgba(16,24,38,.08); color:var(--color-ink-muted); font-size:.74rem; padding:7px 16px; text-align:center; }
+
+  .tabbar{ display:flex; gap:8px; padding:10px 16px; }
+  .tab-btn{ flex:1; padding:10px 12px; border-radius:var(--radius-sm); border:1.5px solid var(--color-steel); background:transparent; color:var(--color-steel-dark); font-weight:700; letter-spacing:.03em; text-transform:uppercase; font-size:.9rem; cursor:pointer; transition:background .15s,color .15s; }
+  .tab-btn[aria-selected="true"]{ background:var(--color-steel-dark); color:#fff; border-color:var(--color-steel-dark); }
+  .tab-btn:hover{ background:rgba(62,105,144,.08); }
+  .tab-btn[aria-selected="true"]:hover{ background:var(--color-steel-dark); }
+
+  main{ display:block; }
+  .tab-panel{ padding:14px 16px 40px; max-width:880px; margin:0 auto; }
+
+  .action-bar{ display:flex; flex-wrap:wrap; gap:10px; margin-bottom:14px; }
+  .btn{ font-weight:600; font-size:.92rem; border-radius:var(--radius-sm); padding:12px 16px; border:1.5px solid transparent; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:8px; transition:transform .08s,opacity .15s,background .15s; }
+  .btn:active{ transform:scale(.97); }
+  .btn-primary{ background:var(--color-red); color:#fff; flex:1 1 220px; font-size:1rem; box-shadow:0 3px 10px rgba(215,38,61,.3); }
+  .btn-primary:hover{ background:var(--color-red-dark); }
+  .btn-secondary{ background:#fff; border-color:var(--color-steel); color:var(--color-steel-dark); }
+  .btn-secondary:hover{ background:rgba(62,105,144,.08); }
+  .btn-text{ background:transparent; border-color:transparent; color:var(--color-steel-dark); padding:8px 10px; }
+  .btn.is-loading{ opacity:.6; pointer-events:none; }
+
+  .filter-row{ margin-bottom:10px; }
+  .filter-input{ width:100%; padding:10px 12px; border:1px solid rgba(16,24,38,.18); border-radius:var(--radius-sm); font-size:.92rem; }
+
+  .point-list{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:10px; }
+  .point-card{ display:flex; align-items:center; gap:10px; background:#fff; border:1px solid rgba(16,24,38,.1); border-radius:var(--radius-md); padding:10px 12px; box-shadow:var(--shadow-1); }
+  .point-icon svg{ width:30px; height:30px; display:block; }
+  .point-info{ flex:1; min-width:0; display:flex; flex-direction:column; }
+  .point-name{ font-weight:700; font-size:.95rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .point-address{ font-size:.78rem; color:var(--color-ink-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .point-distance{ font-family:var(--font-mono); font-size:.8rem; color:var(--color-steel-dark); white-space:nowrap; }
+  .icon-btn{ border:none; background:transparent; font-size:1.05rem; width:32px; height:32px; border-radius:50%; cursor:pointer; color:var(--color-steel-dark); flex-shrink:0; }
+  .icon-btn:hover{ background:rgba(62,105,144,.1); }
+  .icon-btn-danger{ color:#B0392B; }
+  .icon-btn-danger:hover{ background:rgba(176,57,43,.1); }
+
+  .point-card.is-nearest{ border-color:var(--color-green); background:var(--color-green-soft); animation:card-blink 1.1s ease-in-out infinite; }
+  @keyframes card-blink{ 0%,100%{ box-shadow:0 0 0 0 rgba(31,157,85,.35); } 50%{ box-shadow:0 0 0 7px rgba(31,157,85,.18); } }
+
+  .empty-state{ text-align:center; padding:40px 16px; color:var(--color-ink-muted); font-size:.92rem; }
+
+  .map-wrap{ position:relative; }
+  .map-container{ height:calc(100vh - 230px); min-height:360px; max-height:680px; border-radius:var(--radius-md); overflow:hidden; border:1px solid rgba(16,24,38,.12); }
+  .map-pick-hint{ position:absolute; top:10px; left:50%; transform:translateX(-50%); background:var(--color-ink); color:#fff; font-size:.76rem; padding:6px 14px; border-radius:20px; z-index:500; }
+
+  .nearest-panel{ position:absolute; left:10px; right:10px; bottom:10px; background:#fff; border-radius:var(--radius-md); box-shadow:0 6px 18px rgba(16,24,38,.2); padding:12px 14px; z-index:500; }
+  .nearest-panel h3{ margin:0 0 2px; font-size:1.05rem; text-transform:uppercase; letter-spacing:.02em; }
+  .nearest-panel p{ margin:0 0 8px; font-size:.8rem; color:var(--color-ink-muted); }
+  .nearest-panel .dist{ font-family:var(--font-mono); color:var(--color-green); font-weight:600; }
+  .panel-actions{ display:flex; gap:8px; }
+  .panel-actions .btn{ flex:1; padding:9px 10px; font-size:.84rem; }
+
+  .dea-marker-wrapper svg{ filter:drop-shadow(0 2px 3px rgba(16,24,38,.35)); }
+  .dea-marker-wrapper.is-nearest{ animation:marker-pulse 1.1s ease-in-out infinite; }
+  .dea-marker-wrapper.is-nearest svg circle{ stroke:var(--color-green); }
+  @keyframes marker-pulse{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.18); } }
+  .dea-marker-wrapper.is-pending svg circle{ stroke:var(--color-amber); }
+
+  .user-marker-dot{ display:block; width:16px; height:16px; border-radius:50%; background:var(--color-steel); border:3px solid #fff; animation:userpulse 2s infinite; }
+  @keyframes userpulse{ 0%{ box-shadow:0 0 0 0 rgba(62,105,144,.5); } 70%{ box-shadow:0 0 0 10px rgba(62,105,144,0); } 100%{ box-shadow:0 0 0 0 rgba(62,105,144,0); } }
+
+  .modal-backdrop{ position:fixed; inset:0; background:rgba(16,24,38,.5); display:flex; align-items:center; justify-content:center; padding:16px; z-index:1000; }
+  .modal-backdrop[hidden]{ display:none; }
+  .modal{ background:#fff; border-radius:var(--radius-md); padding:20px; width:100%; max-width:420px; max-height:90vh; overflow-y:auto; }
+  .modal h2{ text-transform:uppercase; letter-spacing:.02em; margin:0 0 4px; font-size:1.2rem; }
+  .modal-hint{ font-size:.8rem; color:var(--color-ink-muted); margin:0 0 14px; }
+  .field{ margin-bottom:12px; display:flex; flex-direction:column; gap:4px; }
+  .field label{ font-size:.8rem; font-weight:600; }
+  .field input, .field textarea{ padding:10px; border:1px solid rgba(16,24,38,.18); border-radius:var(--radius-sm); font-family:var(--font-body); font-size:.92rem; resize:vertical; }
+  .coords-row{ display:flex; gap:8px; }
+  .coords-row .field{ flex:1; }
+  .modal-actions{ display:flex; justify-content:flex-end; gap:8px; margin-top:6px; flex-wrap:wrap; }
+
+  .toast{ position:fixed; left:50%; bottom:18px; transform:translate(-50%,12px); background:var(--color-ink); color:#fff; padding:10px 16px; border-radius:24px; font-size:.85rem; opacity:0; pointer-events:none; transition:opacity .2s,transform .2s; z-index:2000; max-width:90vw; text-align:center; }
+  .toast.show{ opacity:1; transform:translate(-50%,0); }
+  .toast-error{ background:#B0392B; }
+  .toast-success{ background:var(--color-green); }
+
+  footer.app-footer{ text-align:center; font-size:.72rem; color:var(--color-ink-muted); padding:18px 16px 30px; }
+
+  @media (prefers-reduced-motion: reduce){
+    .pulse-track, .point-card.is-nearest, .dea-marker-wrapper.is-nearest, .sync-dot.status-live, .user-marker-dot{ animation:none !important; }
+  }
+  :focus-visible{ outline:3px solid var(--color-steel); outline-offset:2px; }
+  @media (min-width:720px){ .tabbar{ max-width:320px; margin:0 auto; } }
+
+  .dea-popup strong{ font-size:.95rem; }
+  .dea-popup span{ font-size:.8rem; color:var(--color-ink-muted); }
+  .dea-popup p{ font-size:.8rem; margin:6px 0; }
+  .popup-route-btn{ margin-top:6px; background:var(--color-red); color:#fff; border:none; padding:7px 12px; border-radius:6px; font-size:.8rem; cursor:pointer; font-weight:600; }
+
+  /* ---- Botones flotantes ---- */
+  .fab-group{ position:fixed; bottom:24px; right:18px; z-index:900; display:flex; flex-direction:column; align-items:flex-end; gap:10px; }
+  .fab-actions{ display:flex; flex-direction:column; align-items:flex-end; gap:10px; transition:opacity .25s, transform .25s; transform-origin:bottom right; }
+  .fab-actions.fab-hidden{ opacity:0; pointer-events:none; transform:scale(0.7) translateY(20px); }
+  .fab-toggle{ width:36px; height:36px; border-radius:50%; background:rgba(40,40,40,.18); border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:.95rem; color:#444; transition:background .2s; flex-shrink:0; }
+  .fab-toggle:hover{ background:rgba(40,40,40,.30); }
+  .fab-btn{ width:52px; height:52px; border-radius:50%; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:1.45rem; box-shadow:0 4px 14px rgba(16,24,38,.28); transition:background .15s, transform .1s; flex-shrink:0; }
+  .fab-btn:active{ transform:scale(.9); }
+  .fab-911{ background:#D7263D; color:#fff; }
+  .fab-911:hover{ background:#AE1C30; }
+  .fab-email{ background:#3E6990; color:#fff; }
+  .fab-email:hover{ background:#2C4D68; }
+  .fab-btn-wrap{ position:relative; display:flex; align-items:center; gap:8px; }
+  .fab-label{ background:rgba(16,24,38,.82); color:#fff; font-size:.72rem; font-weight:600; padding:4px 9px; border-radius:12px; white-space:nowrap; pointer-events:none; }
+
+  /* ---- Modal Instalar ---- */
+  .install-modal-backdrop{ position:fixed; inset:0; background:rgba(16,24,38,.55); display:flex; align-items:flex-end; justify-content:center; z-index:1200; padding:16px; }
+  .install-modal-backdrop[hidden]{ display:none; }
+  .install-modal{ background:#fff; border-radius:16px 16px 12px 12px; padding:20px; width:100%; max-width:420px; max-height:88vh; overflow-y:auto; }
+  .install-modal h2{ font-family:var(--font-display); text-transform:uppercase; letter-spacing:.03em; font-size:1.3rem; margin:0 0 6px; color:var(--color-red); }
+  .install-modal p{ font-size:.85rem; color:var(--color-ink-muted); margin:0 0 16px; line-height:1.5; }
+  .install-tabs{ display:flex; gap:6px; margin-bottom:16px; }
+  .install-tab{ flex:1; padding:8px 6px; border:1.5px solid rgba(16,24,38,.15); background:transparent; border-radius:var(--radius-sm); font-size:.78rem; font-weight:700; cursor:pointer; color:var(--color-ink-muted); font-family:var(--font-body); }
+  .install-tab.active{ background:var(--color-steel-dark); color:#fff; border-color:var(--color-steel-dark); }
+  .install-panel{ display:none; }
+  .install-panel.active{ display:block; }
+  .install-step{ display:flex; align-items:flex-start; gap:10px; margin-bottom:12px; font-size:.84rem; line-height:1.5; }
+  .install-step-num{ min-width:24px; height:24px; background:var(--color-steel-dark); color:#fff; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:.72rem; font-weight:700; flex-shrink:0; margin-top:1px; }
+  .install-step-icon{ font-size:1.2rem; min-width:24px; text-align:center; flex-shrink:0; }
+  .btn-install-native{ width:100%; padding:13px; background:var(--color-red); color:#fff; border:none; border-radius:var(--radius-sm); font-size:1rem; font-weight:700; cursor:pointer; font-family:var(--font-body); margin-bottom:8px; }
+  .btn-install-native:hover{ background:var(--color-red-dark); }
+  .btn-install-native:disabled{ opacity:.5; cursor:default; }
+  .install-close-btn{ width:100%; padding:10px; background:transparent; border:1.5px solid rgba(16,24,38,.18); border-radius:var(--radius-sm); font-size:.88rem; font-weight:600; cursor:pointer; color:var(--color-ink-muted); font-family:var(--font-body); }
+
+  /* ---- Banner de instalación ---- */
+  .install-banner{ background:linear-gradient(135deg,#D7263D,#AE1C30); color:#fff; padding:10px 16px; display:flex; align-items:center; gap:10px; cursor:pointer; }
+  .install-banner[hidden]{ display:none; }
+  .install-banner-text{ flex:1; font-size:.8rem; line-height:1.4; }
+  .install-banner-text strong{ display:block; font-size:.9rem; }
+  .install-banner-close{ background:rgba(255,255,255,.25); border:none; color:#fff; width:26px; height:26px; border-radius:50%; font-size:1rem; cursor:pointer; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+</style>
+</head>
+<body>
+
+<div class="top-chrome">
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-icon" aria-hidden="true">
+        <svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="20" cy="20" r="17" fill="#FFFFFF" stroke="#D7263D" stroke-width="3"/>
+          <path d="M20 30 C20 30 8 23 8 15 C8 10.5 11.5 8 15 9.2 C17 9.9 19 11.5 20 13.2 C21 11.5 23 9.9 25 9.2 C28.5 8 32 10.5 32 15 C32 23 20 30 20 30 Z" fill="#D7263D"/>
+          <rect x="17.5" y="11" width="5" height="14" fill="#FFFFFF"/>
+          <rect x="13" y="15.5" width="14" height="5" fill="#FFFFFF"/>
+        </svg>
+      </span>
+      <span class="brand-text">
+        <h1 class="brand-title">DEA Río Cuarto</h1>
+        <p class="brand-sub">Mapa colaborativo de desfibriladores</p>
+      </span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
+      <button id="btnInstallApp" style="display:none;background:var(--color-red);color:#fff;border:none;border-radius:20px;padding:6px 12px;font-size:.75rem;font-weight:700;cursor:pointer;font-family:var(--font-body);white-space:nowrap;" aria-label="Instalar app">📲 Instalar</button>
+      <div class="sync-status">
+        <span class="sync-dot" id="syncDot"></span>
+        <span id="syncLabel">Conectando…</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="pulse-strip" id="pulseStrip" aria-hidden="true">
+    <svg class="pulse-track" viewBox="0 0 600 14" preserveAspectRatio="none">
+      <path d="M0 7 H40 L46 1 L52 13 L58 7 H300 M300 7 H340 L346 1 L352 13 L358 7 H600"/>
+    </svg>
+  </div>
+
+  <div class="config-banner" id="configBanner" hidden>
+    Para que esta app funcione necesitás conectar tu propio proyecto de Supabase: editá las constantes
+    <code>SUPABASE_URL</code> y <code>SUPABASE_ANON_KEY</code> dentro del archivo HTML. Mirá los comentarios
+    al inicio de la etiqueta <code>&lt;script&gt;</code> para los pasos y el SQL necesario.
+  </div>
+
+  <div class="notice-banner">
+    Datos cargados por la comunidad: verificá la disponibilidad real del DEA antes de una emergencia. Ante una urgencia, llamá primero al servicio de emergencias.
+  </div>
+
+  <div class="tabbar" role="tablist" aria-label="Secciones">
+    <button type="button" class="tab-btn" id="tabBtnLista" role="tab" aria-selected="true" aria-controls="panelLista">Lista</button>
+    <button type="button" class="tab-btn" id="tabBtnMapa" role="tab" aria-selected="false" aria-controls="panelMapa">Mapa</button>
+  </div>
+</div>
+
+<main>
+  <section class="tab-panel" id="panelLista" role="tabpanel" aria-labelledby="tabBtnLista">
+    <div class="action-bar">
+      <button type="button" class="btn btn-primary" id="btnBuscarLista">📍 Buscar el más cercano</button>
+      <button type="button" class="btn btn-secondary" id="btnAgregarLista">+ Agregar punto</button>
+    </div>
+    <div class="filter-row">
+      <input type="search" class="filter-input" id="filterInput" placeholder="Filtrar por nombre o dirección…">
+    </div>
+    <ul class="point-list" id="pointList"></ul>
+    <p class="empty-state" id="emptyState" hidden>Todavía no hay puntos cargados. Sé la primera persona en agregar un DEA.</p>
+  </section>
+
+  <section class="tab-panel" id="panelMapa" role="tabpanel" aria-labelledby="tabBtnMapa" hidden>
+    <div class="action-bar">
+      <button type="button" class="btn btn-primary" id="btnBuscarMapa">📍 Buscar el más cercano</button>
+      <button type="button" class="btn btn-secondary" id="btnAgregarMapa">+ Agregar punto</button>
+    </div>
+    <div class="map-wrap">
+      <div class="map-container" id="map"></div>
+      <div class="map-pick-hint" id="mapPickHint" hidden>Tocá el mapa para ubicar el nuevo DEA</div>
+      <div class="nearest-panel" id="nearestPanel" hidden>
+        <h3 id="nearestPanelName"></h3>
+        <p id="nearestPanelAddress"></p>
+        <p>Distancia: <span class="dist" id="nearestPanelDistance"></span></p>
+        <div class="panel-actions">
+          <button type="button" class="btn btn-secondary" id="btnCerrarPanel">Cerrar</button>
+          <button type="button" class="btn btn-primary" id="btnAbrirMaps">Abrir en Google Maps</button>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- Banner de instalación (aparece automáticamente en móvil) -->
+<div class="install-banner" id="installBanner" hidden>
+  <span style="font-size:1.6rem">📲</span>
+  <div class="install-banner-text">
+    <strong>Instalá la app en tu teléfono</strong>
+    Acceso rápido sin abrir el navegador
+  </div>
+  <button class="install-banner-close" id="installBannerClose" aria-label="Cerrar">×</button>
+</div>
+
+<footer class="app-footer">Proyecto comunitario de acceso a desfibriladores · Río Cuarto, Córdoba</footer>
+
+<!-- Botones flotantes -->
+<div class="fab-group" id="fabGroup">
+  <div class="fab-actions" id="fabActions">
+    <div class="fab-btn-wrap">
+      <span class="fab-label">Sugerir ubicación cardioprotegida</span>
+      <button class="fab-btn fab-email" id="fabEmail" aria-label="Sugerir ubicación cardioprotegida">✉️</button>
+    </div>
+    <div class="fab-btn-wrap">
+      <span class="fab-label">Llamar al 911</span>
+      <button class="fab-btn fab-911" id="fab911" aria-label="Llamar al 911">🚑</button>
+    </div>
+  </div>
+  <button class="fab-toggle" id="fabToggle" aria-label="Ocultar botones" title="Ocultar/mostrar botones">▾</button>
+</div>
+
+<!-- Modal de instalación como app -->
+<div class="install-modal-backdrop" id="installModalBackdrop" hidden>
+  <div class="install-modal" role="dialog" aria-modal="true" aria-labelledby="installModalTitle">
+    <h2 id="installModalTitle">📲 Instalá la app</h2>
+    <p>Agregá DEA Río Cuarto a tu pantalla de inicio para acceder en segundos durante una emergencia.</p>
+    <div class="install-tabs">
+      <button class="install-tab active" data-panel="android">Android</button>
+      <button class="install-tab" data-panel="iphone">iPhone</button>
+      <button class="install-tab" data-panel="pc">PC / Mac</button>
+    </div>
+
+    <div class="install-panel active" id="panel-android">
+      <button class="btn-install-native" id="btnInstallNative" style="display:none">⬇ Instalar ahora</button>
+      <div class="install-step"><span class="install-step-icon">🌐</span><span>Abrí esta página en <strong>Google Chrome</strong>.</span></div>
+      <div class="install-step"><span class="install-step-icon">⋮</span><span>Tocá el menú de tres puntos en la esquina superior derecha.</span></div>
+      <div class="install-step"><span class="install-step-num">3</span><span>Elegí <strong>"Agregar a pantalla de inicio"</strong> o <strong>"Instalar app"</strong>.</span></div>
+      <div class="install-step"><span class="install-step-num">4</span><span>Confirmá y la app aparecerá como ícono en tu pantalla.</span></div>
+    </div>
+
+    <div class="install-panel" id="panel-iphone">
+      <div class="install-step"><span class="install-step-icon">🌐</span><span>Abrí esta página en <strong>Safari</strong> (no en Chrome ni otro navegador).</span></div>
+      <div class="install-step"><span class="install-step-icon">⬆</span><span>Tocá el botón <strong>Compartir</strong> (el cuadrado con la flecha hacia arriba) en la barra inferior.</span></div>
+      <div class="install-step"><span class="install-step-num">3</span><span>Deslizá hacia abajo y elegí <strong>"Agregar a inicio"</strong>.</span></div>
+      <div class="install-step"><span class="install-step-num">4</span><span>Tocá <strong>Agregar</strong> y la app aparecerá en tu pantalla de inicio.</span></div>
+    </div>
+
+    <div class="install-panel" id="panel-pc">
+      <button class="btn-install-native" id="btnInstallNativePC" style="display:none">⬇ Instalar en esta PC</button>
+      <div class="install-step"><span class="install-step-icon">🌐</span><span>Abrí esta página en <strong>Google Chrome</strong> o <strong>Microsoft Edge</strong>.</span></div>
+      <div class="install-step"><span class="install-step-icon">⊕</span><span>En la barra de direcciones vas a ver un ícono de instalar (<strong>+</strong> o monitor). Hacé clic.</span></div>
+      <div class="install-step"><span class="install-step-num">3</span><span>También podés ir al menú (⋮) y elegir <strong>"Instalar DEA Río Cuarto"</strong>.</span></div>
+      <div class="install-step"><span class="install-step-num">4</span><span>La app se abre como ventana propia y aparece en el escritorio.</span></div>
+    </div>
+
+    <button class="install-close-btn" id="installModalClose">Cerrar</button>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="modalBackdrop" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <h2 id="modalTitle">Agregar punto DEA</h2>
+    <p class="modal-hint">Este punto se va a compartir en tiempo real con todas las personas que usen la app.</p>
+    <form id="addForm">
+      <div class="field">
+        <label for="inputNombre">Nombre del lugar *</label>
+        <input type="text" id="inputNombre" required maxlength="120" placeholder="Ej: Farmacia San Martín">
+      </div>
+      <div class="field">
+        <label for="inputDireccion">Dirección</label>
+        <input type="text" id="inputDireccion" maxlength="160" placeholder="Ej: Av. Sabattini 1234">
+      </div>
+      <div class="field">
+        <label for="inputDescripcion">Notas (opcional)</label>
+        <textarea id="inputDescripcion" rows="2" maxlength="240" placeholder="Ej: En la recepción, planta baja"></textarea>
+      </div>
+      <div class="coords-row">
+        <div class="field">
+          <label for="inputLat">Latitud *</label>
+          <input type="number" id="inputLat" step="any" required placeholder="-33.1301">
+        </div>
+        <div class="field">
+          <label for="inputLng">Longitud *</label>
+          <input type="number" id="inputLng" step="any" required placeholder="-64.3499">
+        </div>
+      </div>
+      <button type="button" class="btn btn-text" id="btnUsarUbicacion">📍 Usar mi ubicación actual</button>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" id="btnCancelarModal">Cancelar</button>
+        <button type="submit" class="btn btn-primary" id="btnGuardar">Guardar punto</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="toast" id="toast" aria-live="polite"></div>
+
+
+<!-- PWA: registro del service worker externo -->
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('/sw.js').catch(function(err) {
+      console.warn('SW no registrado:', err);
+    });
+  });
+}
+</script>
+
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function(){
+  "use strict";
+
+  /* ============================================================
+     CONFIGURACIÓN DE SUPABASE
+     ------------------------------------------------------------
+     1) Creá un proyecto gratuito en https://supabase.com
+     2) En el SQL Editor, ejecutá:
+
+        create table dea_locations (
+          id uuid default gen_random_uuid() primary key,
+          nombre text not null,
+          direccion text,
+          descripcion text,
+          lat double precision not null,
+          lng double precision not null,
+          created_at timestamp with time zone default now()
+        );
+
+        alter table dea_locations enable row level security;
+
+        create policy "lectura publica" on dea_locations
+          for select using (true);
+        create policy "insercion publica" on dea_locations
+          for insert with check (true);
+        create policy "borrado publico" on dea_locations
+          for delete using (true);
+
+     3) Activá Realtime para la tabla: Database > Replication >
+        habilitá "dea_locations" (o ejecutá
+        alter publication supabase_realtime add table dea_locations;)
+     4) Reemplazá los valores de abajo con los de tu proyecto
+        (Project Settings > API).
+     ============================================================ */
+  const SUPABASE_URL = 'https://kqoixeufujrtyuekjiim.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtxb2l4ZXVmdWpydHl1ZWtqaWltIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0MzI2NzgsImV4cCI6MjA5MDAwODY3OH0.nyWVv9EIGwLKVMxIGBAzpunBi4QsKWSIzaAfkg0_Xd0';
+  const SUPABASE_CONFIGURED = SUPABASE_URL.indexOf('TU-PROYECTO') === -1 && SUPABASE_ANON_KEY.indexOf('TU_CLAVE') === -1;
+
+  const RIO_CUARTO_CENTER = [-33.1301, -64.3499];
+
+  let sb = null;
+  if (SUPABASE_CONFIGURED && window.supabase) {
+    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  }
+
+  /* ---------- estado ---------- */
+  let points = [];
+  let userPos = null;
+  let activeTab = 'lista';
+  let highlightedListId = null;
+  let highlightedMapId = null;
+  let map = null;
+  let markersById = {};
+  let userMarker = null;
+  let routeLine = null;
+  let tempMarker = null;
+  let pickingActive = false;
+
+  /* ---------- referencias DOM ---------- */
+  const $ = (id) => document.getElementById(id);
+  const configBanner = $('configBanner');
+  const tabBtnLista = $('tabBtnLista');
+  const tabBtnMapa = $('tabBtnMapa');
+  const panelLista = $('panelLista');
+  const panelMapa = $('panelMapa');
+  const pointListEl = $('pointList');
+  const emptyStateEl = $('emptyState');
+  const filterInput = $('filterInput');
+  const btnBuscarLista = $('btnBuscarLista');
+  const btnBuscarMapa = $('btnBuscarMapa');
+  const btnAgregarLista = $('btnAgregarLista');
+  const btnAgregarMapa = $('btnAgregarMapa');
+  const modalBackdrop = $('modalBackdrop');
+  const addForm = $('addForm');
+  const inputNombre = $('inputNombre');
+  const inputDireccion = $('inputDireccion');
+  const inputDescripcion = $('inputDescripcion');
+  const inputLat = $('inputLat');
+  const inputLng = $('inputLng');
+  const btnUsarUbicacion = $('btnUsarUbicacion');
+  const btnCancelarModal = $('btnCancelarModal');
+  const btnGuardar = $('btnGuardar');
+  const mapPickHint = $('mapPickHint');
+  const nearestPanel = $('nearestPanel');
+  const nearestPanelName = $('nearestPanelName');
+  const nearestPanelAddress = $('nearestPanelAddress');
+  const nearestPanelDistance = $('nearestPanelDistance');
+  const btnAbrirMaps = $('btnAbrirMaps');
+  const btnCerrarPanel = $('btnCerrarPanel');
+  const pulseStrip = $('pulseStrip');
+  const syncDot = $('syncDot');
+  const syncLabel = $('syncLabel');
+  const toastEl = $('toast');
+
+  /* ---------- utilidades ---------- */
+  function escapeHtml(str){
+    return String(str == null ? '' : str).replace(/[&<>"']/g, ch => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[ch]));
+  }
+
+  function showToast(message, type){
+    toastEl.textContent = message;
+    toastEl.className = 'toast show' + (type ? ' toast-' + type : '');
+    clearTimeout(toastEl._timer);
+    toastEl._timer = setTimeout(() => { toastEl.classList.remove('show'); }, 3800);
+  }
+
+  function setButtonLoading(btn, loading){
+    btn.classList.toggle('is-loading', loading);
+    btn.disabled = loading;
+  }
+
+  function triggerPulseSpike(){
+    pulseStrip.classList.add('spike');
+    clearTimeout(pulseStrip._timer);
+    pulseStrip._timer = setTimeout(() => pulseStrip.classList.remove('spike'), 1400);
+  }
+
+  function haversineMeters(lat1, lon1, lat2, lon2){
+    const R = 6371000;
+    const toRad = d => d * Math.PI / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+
+  function formatDistance(m){
+    if (m < 1000) return Math.round(m) + ' m';
+    return (m/1000).toFixed(1) + ' km';
+  }
+
+  function getUserLocation(){
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation){
+        reject(new Error('Tu navegador no soporta geolocalización.'));
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        err => reject(err),
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    });
+  }
+
+  function geoErrorMessage(err){
+    if (err && err.code === 1) return 'Activá el permiso de ubicación en tu navegador para buscar el DEA más cercano.';
+    if (err && err.code === 2) return 'No se pudo determinar tu ubicación. Probá al aire libre o con el GPS activado.';
+    if (err && err.code === 3) return 'La búsqueda de ubicación tardó demasiado. Intentá de nuevo.';
+    return (err && err.message) ? err.message : 'No se pudo obtener tu ubicación.';
+  }
+
+  function findNearest(pos){
+    if (!points.length) return null;
+    let best = null, bestDist = Infinity;
+    for (const p of points){
+      const d = haversineMeters(pos.lat, pos.lng, p.lat, p.lng);
+      if (d < bestDist){ bestDist = d; best = p; }
+    }
+    return { point: best, distance: bestDist };
+  }
+
+  function openGoogleMapsUrl(dest, origin){
+    let url;
+    if (origin){
+      url = `https://www.google.com/maps/dir/?api=1&origin=${origin.lat},${origin.lng}&destination=${dest.lat},${dest.lng}&travelmode=walking`;
+    } else {
+      url = `https://www.google.com/maps/search/?api=1&query=${dest.lat},${dest.lng}`;
+    }
+    window.open(url, '_blank', 'noopener');
+  }
+
+  /* ---------- icono corazón + cruz ---------- */
+  function buildMarkerSvg(opts){
+    opts = opts || {};
+    const stroke = opts.pending ? '#F2A93B' : '#D7263D';
+    return `<svg viewBox="0 0 40 40" width="40" height="40" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="20" cy="20" r="17" fill="#FFFFFF" stroke="${stroke}" stroke-width="3"/>
+      <path d="M20 30 C20 30 8 23 8 15 C8 10.5 11.5 8 15 9.2 C17 9.9 19 11.5 20 13.2 C21 11.5 23 9.9 25 9.2 C28.5 8 32 10.5 32 15 C32 23 20 30 20 30 Z" fill="${stroke}"/>
+      <rect x="17.5" y="11" width="5" height="14" fill="#FFFFFF"/>
+      <rect x="13" y="15.5" width="14" height="5" fill="#FFFFFF"/>
+    </svg>`;
+  }
+
+  function deaIcon(highlighted){
+    return L.divIcon({
+      className: 'dea-marker-wrapper' + (highlighted ? ' is-nearest' : ''),
+      html: buildMarkerSvg(),
+      iconSize: [40,40],
+      iconAnchor: [20,36],
+      popupAnchor: [0,-32]
+    });
+  }
+
+  function pendingIcon(){
+    return L.divIcon({
+      className: 'dea-marker-wrapper is-pending',
+      html: buildMarkerSvg({ pending:true }),
+      iconSize: [40,40],
+      iconAnchor: [20,36],
+      popupAnchor: [0,-32]
+    });
+  }
+
+  function userIcon(){
+    return L.divIcon({
+      className: 'user-marker-wrapper',
+      html: '<span class="user-marker-dot"></span>',
+      iconSize: [18,18],
+      iconAnchor: [9,9]
+    });
+  }
+
+  /* ---------- mapa ---------- */
+  function initMap(){
+    map = L.map('map', { zoomControl: true }).setView(RIO_CUARTO_CENTER, 14);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+  }
+
+  function popupHtml(p){
+    return `<div class="dea-popup">
+      <strong>${escapeHtml(p.nombre)}</strong><br>
+      <span>${escapeHtml(p.direccion || 'Sin dirección registrada')}</span>
+      ${p.descripcion ? '<p>' + escapeHtml(p.descripcion) + '</p>' : ''}
+      <button type="button" class="popup-route-btn" data-action="route" data-id="${p.id}">Cómo llegar</button>
+    </div>`;
+  }
+
+  function renderMapMarkers(){
+    if (!map) return;
+    const currentIds = new Set(points.map(p => p.id));
+    for (const id in markersById){
+      if (!currentIds.has(id)){ map.removeLayer(markersById[id]); delete markersById[id]; }
+    }
+    for (const p of points){
+      if (markersById[p.id]){
+        markersById[p.id].setLatLng([p.lat, p.lng]);
+        markersById[p.id].setPopupContent(popupHtml(p));
+      } else {
+        const marker = L.marker([p.lat, p.lng], { icon: deaIcon(p.id === highlightedMapId) });
+        marker.bindPopup(popupHtml(p));
+        marker.addTo(map);
+        markersById[p.id] = marker;
+      }
+    }
+    refreshMarkerIcons();
+  }
+
+  function refreshMarkerIcons(){
+    for (const id in markersById){
+      markersById[id].setIcon(deaIcon(id === highlightedMapId));
+      if (id === highlightedMapId) markersById[id].setZIndexOffset(1000);
+    }
+  }
+
+  function showOrUpdateUserMarker(pos){
+    if (userMarker){ userMarker.setLatLng([pos.lat, pos.lng]); }
+    else { userMarker = L.marker([pos.lat, pos.lng], { icon: userIcon(), zIndexOffset: 900 }).addTo(map); }
+  }
+
+  function fitMapToPair(pos, point){
+    const bounds = L.latLngBounds([pos.lat, pos.lng], [point.lat, point.lng]).pad(0.3);
+    map.fitBounds(bounds);
+  }
+
+  async function drawRouteBetween(origin, dest){
+    if (routeLine){ map.removeLayer(routeLine); routeLine = null; }
+    const url = `https://router.project-osrm.org/route/v1/foot/${origin.lng},${origin.lat};${dest.lng},${dest.lat}?overview=full&geometries=geojson`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('routing-failed');
+    const data = await res.json();
+    const coords = data.routes && data.routes[0] && data.routes[0].geometry && data.routes[0].geometry.coordinates;
+    if (!coords) throw new Error('no-route');
+    const latlngs = coords.map(c => [c[1], c[0]]);
+    routeLine = L.polyline(latlngs, { color: '#3E6990', weight: 5, opacity: 0.85 }).addTo(map);
+  }
+
+  /* ---------- carga de datos / Supabase ---------- */
+  async function loadPoints(){
+    if (!SUPABASE_CONFIGURED){
+      configBanner.hidden = false;
+      updateSyncStatus(null);
+      return;
+    }
+    const { data, error } = await sb.from('dea_locations').select('*').order('created_at', { ascending: true });
+    if (error){
+      showToast('Error al cargar los datos: ' + error.message, 'error');
+      return;
+    }
+    points = data || [];
+    renderList();
+    renderMapMarkers();
+  }
+
+  async function addPoint(record){
+    const { error } = await sb.from('dea_locations').insert([record]);
+    if (error){
+      showToast('No se pudo guardar el punto: ' + error.message, 'error');
+      return false;
+    }
+    showToast('Punto agregado y compartido con todas las personas que usan la app', 'success');
+    await loadPoints();
+    return true;
+  }
+
+  async function deletePoint(id){
+    const { error } = await sb.from('dea_locations').delete().eq('id', id);
+    if (error){
+      showToast('No se pudo eliminar: ' + error.message, 'error');
+      return;
+    }
+    showToast('Punto eliminado', 'success');
+    await loadPoints();
+  }
+
+  function subscribeRealtime(){
+    if (!SUPABASE_CONFIGURED) return;
+    sb.channel('public:dea_locations')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'dea_locations' }, () => { loadPoints(); })
+      .subscribe((status) => { updateSyncStatus(status); });
+  }
+
+  function updateSyncStatus(status){
+    syncDot.classList.remove('status-live', 'status-down');
+    if (status === 'SUBSCRIBED'){
+      syncDot.classList.add('status-live');
+      syncLabel.textContent = 'En vivo';
+    } else if (!SUPABASE_CONFIGURED) {
+      syncDot.classList.add('status-down');
+      syncLabel.textContent = 'Sin configurar';
+    } else {
+      syncDot.classList.add('status-down');
+      syncLabel.textContent = 'Sin tiempo real';
+    }
+  }
+
+  /* ---------- lista ---------- */
+  function renderList(){
+    const filter = (filterInput.value || '').toLowerCase().trim();
+    let list = points.filter(p =>
+      !filter ||
+      p.nombre.toLowerCase().includes(filter) ||
+      (p.direccion || '').toLowerCase().includes(filter)
+    );
+
+    if (highlightedListId){
+      const idx = list.findIndex(p => p.id === highlightedListId);
+      if (idx > 0){
+        const item = list.splice(idx, 1)[0];
+        list.unshift(item);
+      }
+    }
+
+    pointListEl.innerHTML = '';
+    if (!list.length){
+      emptyStateEl.hidden = false;
+      return;
+    }
+    emptyStateEl.hidden = true;
+
+    for (const p of list){
+      const li = document.createElement('li');
+      li.className = 'point-card' + (p.id === highlightedListId ? ' is-nearest' : '');
+      let distHtml = '';
+      if (userPos){
+        const d = haversineMeters(userPos.lat, userPos.lng, p.lat, p.lng);
+        distHtml = `<span class="point-distance">${formatDistance(d)}</span>`;
+      }
+      li.innerHTML = `
+        <span class="point-icon" aria-hidden="true">${buildMarkerSvg()}</span>
+        <span class="point-info">
+          <span class="point-name">${escapeHtml(p.nombre)}</span>
+          <span class="point-address">${escapeHtml(p.direccion || 'Sin dirección registrada')}</span>
+        </span>
+        ${distHtml}
+        <button type="button" class="icon-btn" data-action="route" data-id="${p.id}" title="Cómo llegar" aria-label="Cómo llegar a ${escapeHtml(p.nombre)}">↗</button>
+        <button type="button" class="icon-btn icon-btn-danger" data-action="delete" data-id="${p.id}" title="Eliminar" aria-label="Eliminar ${escapeHtml(p.nombre)}">×</button>
+      `;
+      pointListEl.appendChild(li);
+    }
+  }
+
+  /* ---------- búsqueda de más cercano ---------- */
+  async function handleBuscarCercanoLista(){
+    triggerPulseSpike();
+    if (!points.length){ showToast('Todavía no hay puntos cargados', 'info'); return; }
+    setButtonLoading(btnBuscarLista, true);
+    try{
+      const pos = await getUserLocation();
+      userPos = pos;
+      const result = findNearest(pos);
+      highlightedListId = result.point.id;
+      renderList();
+      showToast(`Más cercano: ${result.point.nombre} · ${formatDistance(result.distance)}`, 'success');
+    } catch(err){
+      showToast(geoErrorMessage(err), 'error');
+    } finally {
+      setButtonLoading(btnBuscarLista, false);
+    }
+  }
+
+  async function handleBuscarCercanoMapa(){
+    triggerPulseSpike();
+    if (!points.length){ showToast('Todavía no hay puntos cargados', 'info'); return; }
+    setButtonLoading(btnBuscarMapa, true);
+    try{
+      const pos = await getUserLocation();
+      userPos = pos;
+      const result = findNearest(pos);
+      highlightedMapId = result.point.id;
+      refreshMarkerIcons();
+      showOrUpdateUserMarker(pos);
+      fitMapToPair(pos, result.point);
+      showNearestPanel(result.point, result.distance);
+      drawRouteBetween(pos, result.point).catch(() => {
+        showToast('No se pudo trazar la ruta automáticamente. Usá "Abrir en Google Maps".', 'info');
+      });
+    } catch(err){
+      showToast(geoErrorMessage(err), 'error');
+    } finally {
+      setButtonLoading(btnBuscarMapa, false);
+    }
+  }
+
+  function showNearestPanel(point, distance){
+    nearestPanelName.textContent = point.nombre;
+    nearestPanelAddress.textContent = point.direccion || 'Sin dirección registrada';
+    nearestPanelDistance.textContent = formatDistance(distance);
+    nearestPanel.hidden = false;
+    btnAbrirMaps.onclick = () => openGoogleMapsUrl(point, userPos);
+  }
+
+  /* ---------- pestañas ---------- */
+  function setActiveTab(tab){
+    activeTab = tab;
+    tabBtnLista.setAttribute('aria-selected', tab === 'lista');
+    tabBtnMapa.setAttribute('aria-selected', tab === 'mapa');
+    panelLista.hidden = tab !== 'lista';
+    panelMapa.hidden = tab !== 'mapa';
+    if (tab === 'mapa' && map){
+      setTimeout(() => map.invalidateSize(), 60);
+    }
+  }
+
+  /* ---------- modal agregar punto ---------- */
+  function setModalCoords(lat, lng){
+    inputLat.value = lat.toFixed(6);
+    inputLng.value = lng.toFixed(6);
+  }
+
+  function openAddModal(){
+    addForm.reset();
+    modalBackdrop.hidden = false;
+    inputNombre.focus();
+    if (activeTab === 'mapa') enableMapPicking();
+  }
+
+  function closeAddModal(){
+    modalBackdrop.hidden = true;
+    disableMapPicking();
+  }
+
+  function enableMapPicking(){
+    if (!map || pickingActive) return;
+    pickingActive = true;
+    mapPickHint.hidden = false;
+    map.once('click', onMapPickClick);
+  }
+
+  function disableMapPicking(){
+    if (!pickingActive) return;
+    pickingActive = false;
+    mapPickHint.hidden = true;
+    map.off('click', onMapPickClick);
+  }
+
+  function onMapPickClick(e){
+    setModalCoords(e.latlng.lat, e.latlng.lng);
+    placeTempMarker(e.latlng);
+    mapPickHint.hidden = true;
+    pickingActive = false;
+  }
+
+  function placeTempMarker(latlng){
+    if (tempMarker) map.removeLayer(tempMarker);
+    tempMarker = L.marker(latlng, { draggable: true, icon: pendingIcon(), zIndexOffset: 950 }).addTo(map);
+    tempMarker.on('dragend', () => {
+      const ll = tempMarker.getLatLng();
+      setModalCoords(ll.lat, ll.lng);
+    });
+  }
+
+  function clearTempMarker(){
+    if (tempMarker){ map.removeLayer(tempMarker); tempMarker = null; }
+  }
+
+  /* ---------- eventos UI ---------- */
+  tabBtnLista.addEventListener('click', () => setActiveTab('lista'));
+  tabBtnMapa.addEventListener('click', () => setActiveTab('mapa'));
+
+  btnBuscarLista.addEventListener('click', handleBuscarCercanoLista);
+  btnBuscarMapa.addEventListener('click', handleBuscarCercanoMapa);
+
+  btnAgregarLista.addEventListener('click', openAddModal);
+  btnAgregarMapa.addEventListener('click', openAddModal);
+
+  btnCancelarModal.addEventListener('click', () => { clearTempMarker(); closeAddModal(); });
+  modalBackdrop.addEventListener('click', (e) => { if (e.target === modalBackdrop){ clearTempMarker(); closeAddModal(); } });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !modalBackdrop.hidden){ clearTempMarker(); closeAddModal(); } });
+
+  btnUsarUbicacion.addEventListener('click', async () => {
+    try{
+      const pos = await getUserLocation();
+      setModalCoords(pos.lat, pos.lng);
+      if (activeTab === 'mapa' && map){ placeTempMarker(pos); map.panTo([pos.lat, pos.lng]); }
+      showToast('Ubicación actual cargada', 'success');
+    } catch(err){
+      showToast(geoErrorMessage(err), 'error');
+    }
+  });
+
+  addForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!SUPABASE_CONFIGURED){
+      showToast('Configurá Supabase antes de guardar puntos (mirá el aviso amarillo arriba).', 'error');
+      return;
+    }
+    const nombre = inputNombre.value.trim();
+    const direccion = inputDireccion.value.trim();
+    const descripcion = inputDescripcion.value.trim();
+    const lat = parseFloat(inputLat.value);
+    const lng = parseFloat(inputLng.value);
+    if (!nombre || isNaN(lat) || isNaN(lng)){
+      showToast('Completá el nombre y coordenadas válidas', 'error');
+      return;
+    }
+    setButtonLoading(btnGuardar, true);
+    const ok = await addPoint({ nombre, direccion, descripcion, lat, lng });
+    setButtonLoading(btnGuardar, false);
+    if (ok){ clearTempMarker(); closeAddModal(); }
+  });
+
+  btnCerrarPanel.addEventListener('click', () => { nearestPanel.hidden = true; });
+
+  filterInput.addEventListener('input', renderList);
+
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    const action = btn.dataset.action;
+    const id = btn.dataset.id;
+    const p = points.find(x => x.id === id);
+    if (!p) return;
+    if (action === 'route'){
+      openGoogleMapsUrl(p, userPos);
+    } else if (action === 'delete'){
+      if (confirm(`¿Eliminar "${p.nombre}" de la lista compartida? Esta acción no se puede deshacer.`)){
+        deletePoint(id);
+      }
+    }
+  });
+
+  /* ---------- arranque ---------- */
+  async function init(){
+    initMap();
+    setActiveTab('lista');
+    updateSyncStatus(null);
+    await loadPoints();
+    subscribeRealtime();
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+})();
+</script>
+<script>
+(function(){
+  // ---- Botones flotantes ----
+  var fabActions = document.getElementById('fabActions');
+  var fabToggle = document.getElementById('fabToggle');
+  var fab911 = document.getElementById('fab911');
+  var fabEmail = document.getElementById('fabEmail');
+  var fabsVisible = true;
+
+  // Email destino
+  var EMAIL_SOLICITUDES = 'capibaraerrante@gmail.com';
+
+  fabToggle.addEventListener('click', function(){
+    fabsVisible = !fabsVisible;
+    fabActions.classList.toggle('fab-hidden', !fabsVisible);
+    fabToggle.textContent = fabsVisible ? '▾' : '▴';
+    fabToggle.setAttribute('aria-label', fabsVisible ? 'Ocultar botones' : 'Mostrar botones');
+  });
+
+  fab911.addEventListener('click', function(){
+    window.location.href = 'tel:911';
+  });
+
+  fabEmail.addEventListener('click', function(){
+    var subject = encodeURIComponent('Sugerencia de ubicación cardioprotegida - DEA Río Cuarto');
+    var body = encodeURIComponent(
+      'Hola,\n\nQuiero sugerir una nueva ubicación para incorporar al mapa de zonas cardioprotegidas de Río Cuarto.\n\n' +
+      '📍 Nombre del lugar o institución: \n' +
+      '🏠 Dirección: \n' +
+      '📝 Referencia / descripción del lugar: \n' +
+      '🗺️ Coordenadas GPS (si las tenés): \n' +
+      '💬 ¿Tiene o debería tener un DEA? \n\n' +
+      'Gracias por el trabajo que hacen!\n'
+    );
+    window.location.href = 'mailto:' + EMAIL_SOLICITUDES + '?subject=' + subject + '&body=' + body;
+  });
+
+  // ---- Modal de instalación ----
+  var installModal = document.getElementById('installModalBackdrop');
+  var installModalClose = document.getElementById('installModalClose');
+  var btnInstallApp = document.getElementById('btnInstallApp');
+  var installBanner = document.getElementById('installBanner');
+  var installBannerClose = document.getElementById('installBannerClose');
+
+  function openInstallModal(){ installModal.hidden = false; }
+  function closeInstallModal(){ installModal.hidden = true; }
+
+  installModalClose.addEventListener('click', closeInstallModal);
+  installModal.addEventListener('click', function(e){ if(e.target === installModal) closeInstallModal(); });
+
+  // Tabs del modal
+  document.querySelectorAll('.install-tab').forEach(function(tab){
+    tab.addEventListener('click', function(){
+      document.querySelectorAll('.install-tab').forEach(function(t){ t.classList.remove('active'); });
+      document.querySelectorAll('.install-panel').forEach(function(p){ p.classList.remove('active'); });
+      tab.classList.add('active');
+      var panelId = 'panel-' + tab.dataset.panel;
+      var panel = document.getElementById(panelId);
+      if(panel) panel.classList.add('active');
+    });
+  });
+
+  // Banner de instalación
+  btnInstallApp.addEventListener('click', openInstallModal);
+  installBanner.addEventListener('click', function(e){
+    if(e.target !== installBannerClose) openInstallModal();
+  });
+  installBannerClose.addEventListener('click', function(e){
+    e.stopPropagation();
+    installBanner.hidden = true;
+    try{ sessionStorage.setItem('dea-banner-dismissed','1'); } catch(err){}
+  });
+
+  // Capturar evento de instalación nativa (Android Chrome / Edge)
+  var deferredPrompt = null;
+  window.addEventListener('beforeinstallprompt', function(e){
+    e.preventDefault();
+    deferredPrompt = e;
+    btnInstallApp.style.display = 'inline-block';
+
+    // Mostrar banner si no fue descartado
+    try{
+      if(!sessionStorage.getItem('dea-banner-dismissed') && !window.matchMedia('(display-mode: standalone)').matches){
+        installBanner.hidden = false;
+      }
+    } catch(err){ installBanner.hidden = false; }
+
+    // Botón "Instalar ahora" en el modal
+    var btnNative = document.getElementById('btnInstallNative');
+    var btnNativePC = document.getElementById('btnInstallNativePC');
+    [btnNative, btnNativePC].forEach(function(btn){
+      if(!btn) return;
+      btn.style.display = 'block';
+      btn.addEventListener('click', function(){
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.then(function(c){
+          if(c.outcome === 'accepted'){
+            btnInstallApp.style.display = 'none';
+            installBanner.hidden = true;
+            closeInstallModal();
+          }
+          deferredPrompt = null;
+        });
+      });
+    });
+  });
+
+  window.addEventListener('appinstalled', function(){
+    btnInstallApp.style.display = 'none';
+    installBanner.hidden = true;
+    deferredPrompt = null;
+  });
+
+  // En Safari iOS: mostrar el modal con las instrucciones si no es standalone
+  var isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  var isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  if(isIos && !isStandalone){
+    btnInstallApp.style.display = 'inline-block';
+    btnInstallApp.addEventListener('click', function(){
+      // Activar tab de iPhone automáticamente
+      document.querySelectorAll('.install-tab').forEach(function(t){ t.classList.remove('active'); });
+      document.querySelectorAll('.install-panel').forEach(function(p){ p.classList.remove('active'); });
+      var iosTab = document.querySelector('[data-panel="iphone"]');
+      var iosPanel = document.getElementById('panel-iphone');
+      if(iosTab) iosTab.classList.add('active');
+      if(iosPanel) iosPanel.classList.add('active');
+      openInstallModal();
+    });
+    try{
+      if(!sessionStorage.getItem('dea-banner-dismissed')){
+        installBanner.hidden = false;
+      }
+    } catch(err){ installBanner.hidden = false; }
+  }
+
+  // Si ya está instalado como PWA, ocultar botón
+  if(isStandalone){
+    btnInstallApp.style.display = 'none';
+    installBanner.hidden = true;
+  }
+
+})();
+</script>
+</body>
+</html>
